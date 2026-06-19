@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Multi-Language TTS Director</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Custom Titlebar for Dragging -->
+  <header class="titlebar">
+    <div class="titlebar-logo">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+        <path d="M19 10v1a7 7 0 0 1-14 0v-1"/>
+        <line x1="12" x2="12" y1="19" y2="22"/>
+      </svg>
+      <span>Multi-Language TTS Director</span>
+    </div>
+    <div class="titlebar-spacer"></div>
+  </header>
+
+  <main class="app-container">
+    <!-- Left Column: Input and Global Config -->
+    <section class="sidebar-panel">
+      <div class="glass-card editor-card">
+        <div class="card-header">
+          <h2>Văn bản đầu vào</h2>
+          <div class="header-actions">
+            <button id="btn-test-data" class="btn btn-secondary btn-sm" title="Nhập dữ liệu mẫu đa ngôn ngữ để kiểm tra">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><polyline points="21 12 21 21 3 21 3 3 12 3"/></svg>
+              <span>Mẫu Test</span>
+            </button>
+            <button id="btn-clear" class="btn btn-secondary btn-sm" title="Xóa toàn bộ văn bản">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+              <span>Xóa</span>
+            </button>
+          </div>
+        </div>
+        
+        <div class="textarea-container">
+          <textarea id="text-input" placeholder="Nhập hoặc dán văn bản vào đây...
+
+Bạn có thể chèn các thẻ điều hướng để điều khiển giọng đọc động:
+- Đổi ngôn ngữ: [vi] Tiếng Việt, [en] English, [ja] 日本語, [zh] 中文, [ko] 한국어...
+- Chèn khoảng nghỉ: [pause: 1000] (nghỉ 1 giây), [pause: 500] (nghỉ 0.5 giây)
+- Đổi tốc độ: [rate: 1.5] (1.5x), [rate: 2.0] (2.0x)
+- Đổi ngữ điệu/cao độ: [pitch: 1.3] (cao hơn), [pitch: 0.8] (trầm hơn)
+- Đổi cảm xúc: [emotion: excited] (phấn khích), [emotion: sad] (u sầu), [emotion: serious] (nghiêm túc)...
+"></textarea>
+          <div class="text-counter">
+            <span id="char-count">0</span> ký tự | <span id="word-count">0</span> từ
+          </div>
+        </div>
+
+        <div class="parse-action-container">
+          <button id="btn-parse" class="btn btn-primary btn-lg">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+              <line x1="12" y1="22.08" x2="12" y2="12"/>
+            </svg>
+            <span>Phân tích & Tách câu</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Global Settings & Voice Config -->
+      <div class="glass-card settings-card">
+        <div class="card-header">
+          <h2>Cấu hình giọng đọc mặc định</h2>
+        </div>
+        
+        <div class="settings-grid">
+          <!-- Auto Detect -->
+          <div class="setting-item full-width" style="display: none;">
+            <label class="checkbox-container">
+              <input type="checkbox" id="chk-auto-detect" checked>
+              <span class="checkmark"></span>
+              <span class="label-text">Tự động nhận diện ngôn ngữ theo từng câu</span>
+            </label>
+          </div>
+
+          <!-- TTS Engine Selection -->
+          <div class="setting-item full-width">
+            <label for="tts-engine">Nguồn giọng đọc (TTS Engine)</label>
+            <div class="select-wrapper">
+              <select id="tts-engine">
+                <option value="edge" selected>Microsoft Edge Neural (Trực tuyến chất lượng cao)</option>
+                <option value="google">Google Translate TTS (Dự phòng cực kỳ ổn định)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Default Language -->
+          <div class="setting-item hidden" id="default-lang-container">
+            <label for="default-lang">Ngôn ngữ mặc định</label>
+            <div class="select-wrapper">
+              <select id="default-lang">
+                <option value="vi" selected>Tiếng Việt (vi)</option>
+                <option value="en">Tiếng Anh (en)</option>
+                <option value="ko">Tiếng Hàn (ko)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Preset Selection -->
+          <div class="setting-item">
+            <label for="global-preset">Cảm xúc/Ngữ điệu mẫu</label>
+            <div class="select-wrapper">
+              <select id="global-preset">
+                <option value="normal" selected>Bình thường (Mặc định)</option>
+                <option value="excited">Phấn khích (Nhanh, Cao)</option>
+                <option value="sad">U sầu (Chậm, Trầm)</option>
+                <option value="serious">Nghiêm túc (Vừa, Trầm)</option>
+                <option value="whispering">Thì thầm (Chậm, Nhẹ)</option>
+                <option value="robot">Người máy (Đều đều)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Global Speed -->
+          <div class="setting-item">
+            <div class="slider-header">
+              <label for="global-rate">Tốc độ mặc định</label>
+              <span class="slider-value" id="global-rate-val">1.0x</span>
+            </div>
+            <div class="slider-control">
+              <input type="range" id="global-rate" min="0.5" max="4.0" step="0.1" value="1.0">
+              <div class="speed-presets">
+                <button class="btn-preset-speed" data-val="1.0">1x</button>
+                <button class="btn-preset-speed" data-val="1.5">1.5x</button>
+                <button class="btn-preset-speed" data-val="2.0">2x</button>
+                <button class="btn-preset-speed" data-val="3.0">3x</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Global Pitch -->
+          <div class="setting-item">
+            <div class="slider-header">
+              <label for="global-pitch">Cao độ / Ngữ điệu</label>
+              <span class="slider-value" id="global-pitch-val">1.0</span>
+            </div>
+            <div class="slider-control">
+              <input type="range" id="global-pitch" min="0.5" max="2.0" step="0.1" value="1.0">
+              <div class="pitch-presets">
+                <button class="btn-preset-pitch" data-val="0.8">Trầm</button>
+                <button class="btn-preset-pitch" data-val="1.0">Chuẩn</button>
+                <button class="btn-preset-pitch" data-val="1.3">Cao</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Punctuation Pauses -->
+          <div class="setting-item">
+            <div class="slider-header">
+              <label for="comma-pause">Khoảng nghỉ dấu phẩy</label>
+              <span class="slider-value" id="comma-pause-val">250ms</span>
+            </div>
+            <input type="range" id="comma-pause" min="0" max="1000" step="50" value="250">
+          </div>
+
+          <div class="setting-item">
+            <div class="slider-header">
+              <label for="period-pause">Khoảng nghỉ dấu chấm/dòng</label>
+              <span class="slider-value" id="period-pause-val">600ms</span>
+            </div>
+            <input type="range" id="period-pause" min="0" max="2000" step="100" value="600">
+          </div>
+        </div>
+
+        <div class="voice-mapping-section">
+          <h3>Cấu hình Giọng đọc theo ngôn ngữ</h3>
+          <div id="voice-mapping-list" class="voice-mapping-list">
+            <!-- Dynamically populated voice selectors for each active language -->
+            <div class="voice-map-row loading">Đang tải danh sách giọng đọc hệ thống...</div>
+          </div>
+        </div>
+
+        <!-- Google Drive Auto-Upload Configuration -->
+        <div class="voice-mapping-section" style="margin-top: 20px; border-top: 1px solid var(--border-card); padding-top: 15px;">
+          <h3 style="display: flex; align-items: center; gap: 8px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 22h20L12 2zM12 6l7.5 13h-15L12 6z"/></svg>
+            Tự động tải lên Google Drive
+          </h3>
+          <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 12px;">
+            <label class="checkbox-container">
+              <input type="checkbox" id="chk-gdrive-enable">
+              <span class="checkmark"></span>
+              <span class="label-text" style="font-size: 13px; font-weight: 500;">Bật tự động tải lên khi lưu dự án</span>
+            </label>
+            
+
+            <div style="display: flex; flex-direction: column; gap: 5px;">
+              <label for="gdrive-url" style="font-size: 12px; color: var(--text-secondary); font-weight: 500;">Google Apps Script Web App URL</label>
+              <input type="text" id="gdrive-url" placeholder="https://script.google.com/macros/s/.../exec" style="width: 100%; padding: 8px 12px; background: rgba(15, 23, 42, 0.4); border: 1px solid var(--border-card); border-radius: 8px; color: #f8fafc; font-size: 13px; outline: none; transition: border-color 0.2s;">
+            </div>
+            
+            <div style="display: flex; flex-direction: column; gap: 5px;">
+              <label for="gdrive-folder-select" style="font-size: 12px; color: var(--text-secondary); font-weight: 500;">Cấu hình thư mục đã lưu</label>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <div class="select-wrapper" style="flex-grow: 1;">
+                  <select id="gdrive-folder-select" style="width: 100%; padding: 8px 12px; height: 38px;">
+                    <option value="">Thư mục tùy chỉnh mới...</option>
+                  </select>
+                </div>
+                <button type="button" id="btn-delete-folder" class="btn-preset-speed" style="padding: 0 10px; height: 38px; width: 38px; display: flex; align-items: center; justify-content: center; border-radius: 8px; flex-shrink: 0; color: #ef4444;" title="Xóa cấu hình đã chọn">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 5px;">
+              <label for="gdrive-folder-link" style="font-size: 12px; color: var(--text-secondary); font-weight: 500;">Liên kết thư mục Google Drive</label>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <input type="text" id="gdrive-folder-link" placeholder="Dán link liên kết thư mục hoặc ID vào đây" style="flex-grow: 1; padding: 8px 12px; background: rgba(15, 23, 42, 0.4); border: 1px solid var(--border-card); border-radius: 8px; color: #f8fafc; font-size: 13px; outline: none; height: 38px; box-sizing: border-box;">
+                <button type="button" id="btn-save-folder" class="btn-preset-speed" style="padding: 0 12px; height: 38px; display: flex; align-items: center; justify-content: center; border-radius: 8px; flex-shrink: 0; font-size: 12px; font-weight: 500;" title="Lưu cấu hình thư mục">
+                  Lưu cấu hình
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right Column: Speech Timeline -->
+    <section class="main-workspace">
+      <div class="glass-card timeline-card">
+        <div class="card-header timeline-header">
+          <div class="title-with-badge">
+            <h2>Kế hoạch phát giọng đọc (Timeline)</h2>
+            <span id="queue-status-badge" class="badge badge-idle">Sẵn sàng</span>
+          </div>
+          <div class="timeline-summary">
+            <span id="timeline-progress-text">0 / 0 câu</span>
+            <div class="progress-bar-bg">
+              <div id="timeline-progress-bar" class="progress-bar-fill" style="width: 0%;"></div>
+            </div>
+          </div>
+          <div class="header-actions">
+            <button id="btn-export-mp3" class="btn btn-primary btn-sm" title="Xuất toàn bộ Timeline ra file MP3">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              <span>Xuất MP3</span>
+            </button>
+            <button id="btn-save-project" class="btn btn-secondary btn-sm" title="Lưu dự án thành file MP3 nội bộ">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              <span>Lưu dự án</span>
+            </button>
+          </div>
+        </div>
+
+        <div id="timeline-empty" class="timeline-empty-state">
+          <div class="empty-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="8" y1="6" x2="21" y2="6"/>
+              <line x1="8" y1="12" x2="21" y2="12"/>
+              <line x1="8" y1="18" x2="21" y2="18"/>
+              <line x1="3" y1="6" x2="3.01" y2="6"/>
+              <line x1="3" y1="12" x2="3.01" y2="12"/>
+              <line x1="3" y1="18" x2="3.01" y2="18"/>
+            </svg>
+          </div>
+          <p>Chưa có dữ liệu timeline. Hãy nhập văn bản ở bên trái và bấm <strong>"Phân tích & Tách câu"</strong> để tạo danh sách câu đọc.</p>
+        </div>
+
+        <div id="timeline-list" class="timeline-list-container hidden">
+          <!-- Speech and Pause blocks will be rendered here -->
+        </div>
+      </div>
+
+      <!-- Saved Audio Library Card -->
+      <div class="glass-card history-card" style="margin-top: 15px;">
+        <div class="card-header">
+          <h2>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 18V5l12-2v13"/>
+              <circle cx="6" cy="18" r="3"/>
+              <circle cx="18" cy="16" r="3"/>
+            </svg>
+            <span>Thư viện Audio đã lưu</span>
+          </h2>
+          <button id="btn-refresh-history" class="btn btn-secondary btn-sm" title="Làm mới thư viện">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+            <span>Làm mới</span>
+          </button>
+        </div>
+        <div id="history-empty" class="history-empty-state">
+          <p>Chưa có file audio nào được xuất hoặc lưu. Hãy nhấn <strong>"Xuất MP3"</strong> hoặc <strong>"Lưu dự án"</strong> ở trên để tạo file âm thanh.</p>
+        </div>
+        <div id="history-list" class="history-list-container hidden">
+          <!-- Audio history items will be rendered here -->
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Bottom Player Dock -->
+  <footer class="player-dock">
+    <div class="player-content">
+      <!-- Active Audio Playback Seekbar and Seek Track -->
+      <div class="active-sentence-container" style="flex-direction: column; align-items: stretch; gap: 8px; width: 100%;">
+        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+          <div class="active-sentence-title">Đang phát:</div>
+          <span id="player-time-display" style="font-size: 12px; font-family: 'JetBrains Mono', monospace; color: var(--text-secondary);">00:00 / 00:00</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; width: 100%;">
+          <input type="range" id="player-seekbar" min="0" max="100" value="0" style="flex-grow: 1; margin: 0;">
+        </div>
+      </div>
+
+      <!-- Player Controls -->
+      <div class="player-controls-container">
+        <div class="playback-controls">
+          <button id="btn-prev" class="btn-player btn-player-secondary" title="Câu trước">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/></svg>
+          </button>
+          
+          <button id="btn-play-pause" class="btn-player btn-player-primary" title="Phát / Tạm dừng">
+            <svg id="play-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <svg id="pause-icon" class="hidden" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+          </button>
+          
+          <button id="btn-stop" class="btn-player btn-player-secondary" title="Dừng hẳn">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16"/></svg>
+          </button>
+
+          <button id="btn-next" class="btn-player btn-player-secondary" title="Câu tiếp theo">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+          </button>
+        </div>
+
+        <!-- Right: volume and extra status -->
+        <div class="player-volume-control">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+          <input type="range" id="player-volume" min="0" max="1" step="0.1" value="1">
+          <span id="player-volume-val">100%</span>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{
+  "name": "multilingual-tts-director",
+  "version": "1.0.0",
+  "description": "Multilingual Text-to-Speech Director with Custom Pauses, Speed, Pitch, and Emotions",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^31.0.0"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
