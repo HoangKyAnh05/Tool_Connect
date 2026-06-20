@@ -87,6 +87,7 @@ const btnExportMp3 = document.getElementById('btn-export-mp3');
 const btnRefreshHistory = document.getElementById('btn-refresh-history');
 const historyEmpty = document.getElementById('history-empty');
 const historyList = document.getElementById('history-list');
+const btnStripPunctuation = document.getElementById('btn-strip-punctuation');
 
 // -------------------------------------------------------------
 // Initialize App & Voice Loading
@@ -97,6 +98,8 @@ async function init() {
 
   // Load configuration from file
   await loadAppSettings();
+
+
 
   // Initialize Google Drive settings from appSettings
   const chkGDriveEnable = document.getElementById('chk-gdrive-enable');
@@ -273,6 +276,34 @@ Bây giờ, [rate: 1.5] chúng ta sẽ tăng tốc độ đọc lên 1.5x để 
     txtInput.focus();
   });
 
+  if (btnStripPunctuation) {
+    btnStripPunctuation.addEventListener('click', () => {
+      const originalText = txtInput.value;
+      if (!originalText.trim()) return;
+
+      const tokens = originalText.split(/(\[[^\]]+\])/g);
+      
+      const processedTokens = tokens.map(token => {
+        if (token.startsWith('[') && token.endsWith(']')) {
+          return token;
+        }
+        
+        let clean = token;
+        // Strip half-width and full-width punctuation, and common Markdown/math symbols (like #, *, _, +, =, etc.)
+        clean = clean.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'|、。！？：；（）【】“”‘’#*=+<>\@\[\]\{\}\\\^]/g, ' ');
+        // Replace standalone hyphens/dashes with a space
+        clean = clean.replace(/(?:\s|^)-+(?:\s|$)/g, ' ');
+        // Collapse multiple spaces to a single space
+        clean = clean.replace(/\s+/g, ' ');
+        return clean;
+      });
+      
+      txtInput.value = processedTokens.join('').trim();
+      updateTextCounts();
+      txtInput.focus();
+    });
+  }
+
   // Action buttons
   btnParse.addEventListener('click', handleParseText);
 
@@ -298,8 +329,9 @@ Bây giờ, [rate: 1.5] chúng ta sẽ tăng tốc độ đọc lên 1.5x để 
     const val = parseFloat(globalRate.value);
     globalRateVal.textContent = `${val}x`;
     updatePresetSpeedButtonsActive();
-    if (currentAudioPlayer && !currentAudioPlayer.dataset.isPreSpedUp) {
-      currentAudioPlayer.playbackRate = val;
+    if (currentAudioPlayer) {
+      const synthesizedRate = parseFloat(currentAudioPlayer.dataset.synthesizedRate) || 1.0;
+      currentAudioPlayer.playbackRate = val / synthesizedRate;
     }
     updateAllSegmentsRate(val);
   });
@@ -343,8 +375,9 @@ Bây giờ, [rate: 1.5] chúng ta sẽ tăng tốc độ đọc lên 1.5x để 
       globalRate.value = val;
       globalRateVal.textContent = `${val}x`;
       updatePresetSpeedButtonsActive();
-      if (currentAudioPlayer && !currentAudioPlayer.dataset.isPreSpedUp) {
-        currentAudioPlayer.playbackRate = val;
+      if (currentAudioPlayer) {
+        const synthesizedRate = parseFloat(currentAudioPlayer.dataset.synthesizedRate) || 1.0;
+        currentAudioPlayer.playbackRate = val / synthesizedRate;
       }
       updateAllSegmentsRate(val);
     });
@@ -501,6 +534,8 @@ function renderVoiceMappingList() {
         selectedLanguageVoices[langCode] = e.target.value;
         // Update all speech blocks matching this language in the timeline
         updateTimelineVoicesForLang(langCode, e.target.value);
+        // Force timeline blocks to update their select option lists
+        renderTimeline();
       });
     }
     
@@ -544,11 +579,12 @@ function getPreferredVoice(lang, voicesList) {
 function updateTimelineVoicesForLang(langCode, voiceName) {
   queue.forEach((segment, idx) => {
     if (segment.type === 'speech' && segment.lang === langCode) {
-      segment.voiceName = voiceName;
-      // Update individual block voice select UI if rendered
-      const blockSelect = document.getElementById(`block-voice-${idx}`);
-      if (blockSelect) {
-        blockSelect.value = voiceName;
+      if (segment.voiceName !== voiceName) {
+        segment.voiceName = voiceName;
+        segment.audioData = null; // Invalidate cache so new voice gets synthesized
+        if (currentQueueIndex === idx) {
+          stopQueue();
+        }
       }
     }
   });
@@ -790,7 +826,7 @@ function parseTextToQueue(text, config) {
     }
   }
 
-  tokens.forEach(token => {
+  tokens.forEach((token, tokenIndex) => {
     if (token.startsWith('[') && token.endsWith(']')) {
       const tagContent = token.slice(1, -1).trim().toLowerCase();
       
@@ -1001,33 +1037,21 @@ function renderPauseBlock(container, item, index) {
   });
 }
 
+function getVoiceDisplayName(voiceName) {
+  if (!voiceName) return 'Mặc định';
+  const v = voices.find(val => val.name === voiceName);
+  if (v) {
+    const shortName = v.name.split('-').pop();
+    const genderText = v.gender === 'Female' ? 'Nữ' : v.gender === 'Male' ? 'Nam' : 'N/A';
+    return `${shortName} (${genderText})`;
+  }
+  return voiceName.split('-').pop() || voiceName;
+}
+
 function renderSpeechBlock(container, item, index) {
-  // Ensure item.voiceName is populated if it's currently empty or not in system voices
+  // Ensure item.voiceName is populated if it's currently empty
   if (!item.voiceName) {
-    item.voiceName = selectedLanguageVoices[item.lang] || '';
-  }
-  
-  // Filter voices compatible with this block's language
-  const compatibleVoices = voices.filter(v => v.lang.toLowerCase().startsWith(item.lang));
-  
-  // If item.voiceName is not in the compatible list, fall back to preferred voice
-  if (compatibleVoices.length > 0) {
-    const hasVoice = compatibleVoices.some(v => v.name === item.voiceName);
-    if (!hasVoice) {
-      const preferred = getPreferredVoice(item.lang, compatibleVoices);
-      item.voiceName = preferred ? preferred.name : compatibleVoices[0].name;
-    }
-  }
-  
-  // Construct voice options
-  let voiceOptionsHTML = '';
-  compatibleVoices.forEach(v => {
-    const isSelected = v.name === item.voiceName ? 'selected' : '';
-    voiceOptionsHTML += `<option value="${v.name}" ${isSelected}>${v.name}</option>`;
-  });
-  
-  if (compatibleVoices.length === 0) {
-    voiceOptionsHTML = `<option value="">Dùng giọng mặc định hệ thống</option>`;
+    item.voiceName = selectedLanguageVoices[item.lang] || (voices.length > 0 ? voices[0].name : '');
   }
   
   container.innerHTML = `
@@ -1035,10 +1059,10 @@ function renderSpeechBlock(container, item, index) {
       <span class="block-index">#${index + 1}</span>
       <span class="block-badge-lang lang-${item.lang}">${langNames[item.lang] || item.lang}</span>
       
-      <div class="block-voice-select select-wrapper">
-        <select id="block-voice-${index}">
-          ${voiceOptionsHTML}
-        </select>
+      <div class="block-voice-toggle-wrapper">
+        <button class="block-voice-toggle-btn" id="block-voice-btn-${index}" title="Bấm để đổi nhanh giọng/ngôn ngữ">
+          ${getVoiceDisplayName(item.voiceName)}
+        </button>
       </div>
       
       <div class="block-actions">
@@ -1079,16 +1103,62 @@ function renderSpeechBlock(container, item, index) {
     </div>
   `;
   
-  // Set voice listener
-  const voiceSelect = container.querySelector(`#block-voice-${index}`);
-  voiceSelect.addEventListener('change', (e) => {
-    item.voiceName = e.target.value;
+  // Set voice listener (Toggle Button)
+  const voiceBtn = container.querySelector(`#block-voice-btn-${index}`);
+  voiceBtn.addEventListener('click', () => {
+    const defaultVoiceNames = Object.values(selectedLanguageVoices).filter(Boolean);
+    if (defaultVoiceNames.length === 0) return;
+    
+    let currentIdx = defaultVoiceNames.indexOf(item.voiceName);
+    if (currentIdx === -1) {
+      const matchingVoice = defaultVoiceNames.find(vName => {
+        const v = voices.find(val => val.name === vName);
+        return v && v.lang.split('-')[0].toLowerCase() === item.lang;
+      });
+      currentIdx = matchingVoice ? defaultVoiceNames.indexOf(matchingVoice) : 0;
+    }
+    
+    const nextIdx = (currentIdx + 1) % defaultVoiceNames.length;
+    const newVoiceName = defaultVoiceNames[nextIdx];
+    
+    if (item.voiceName !== newVoiceName) {
+      item.voiceName = newVoiceName;
+      item.audioData = null; // invalidate cache
+      
+      if (currentQueueIndex === index) {
+        stopQueue();
+      }
+
+      voiceBtn.textContent = getVoiceDisplayName(newVoiceName);
+
+      const selectedVoice = voices.find(v => v.name === newVoiceName);
+      if (selectedVoice) {
+        const newLang = selectedVoice.lang.split('-')[0].toLowerCase();
+        if (item.lang !== newLang) {
+          item.lang = newLang;
+          
+          const badge = container.querySelector('.block-badge-lang');
+          if (badge) {
+            badge.textContent = langNames[newLang] || newLang.toUpperCase();
+            badge.className = `block-badge-lang lang-${newLang}`;
+          }
+        }
+      }
+    }
   });
   
   // Set editable text listener
   const textElem = container.querySelector(`#block-text-${index}`);
   textElem.addEventListener('blur', () => {
-    item.text = textElem.innerText.trim();
+    const val = textElem.innerText.trim();
+    if (item.text !== val) {
+      item.text = val;
+      item.audioData = null; // invalidate cache
+      
+      if (currentQueueIndex === index) {
+        stopQueue();
+      }
+    }
   });
   
   // Set sliders listeners
@@ -1098,15 +1168,24 @@ function renderSpeechBlock(container, item, index) {
     const val = parseFloat(e.target.value);
     item.rate = val;
     rateVal.textContent = `${val}x`;
-    if (isPlaying && currentQueueIndex === index && currentAudioPlayer && !currentAudioPlayer.dataset.isPreSpedUp) {
-      currentAudioPlayer.playbackRate = val;
+    if (isPlaying && currentQueueIndex === index && currentAudioPlayer) {
+      const synthesizedRate = parseFloat(currentAudioPlayer.dataset.synthesizedRate) || 1.0;
+      currentAudioPlayer.playbackRate = val / synthesizedRate;
     }
   });
   
   const pitchRange = container.querySelector(`#block-pitch-range-${index}`);
   const pitchVal = container.querySelector(`#block-pitch-val-${index}`);
   pitchRange.addEventListener('input', (e) => {
-    item.pitch = parseFloat(e.target.value);
+    const val = parseFloat(e.target.value);
+    if (item.pitch !== val) {
+      item.pitch = val;
+      item.audioData = null; // invalidate cache
+      
+      if (currentQueueIndex === index) {
+        stopQueue();
+      }
+    }
     pitchVal.textContent = e.target.value;
   });
 
@@ -1180,9 +1259,97 @@ function handlePlayPause() {
   }
 }
 
-function playQueue() {
+let isPreloading = false;
+
+async function preloadQueueAudio() {
+  if (isPreloading) return;
+  isPreloading = true;
+  
+  // Find all speech blocks that don't have audioData cached
+  const uncachedSegments = queue
+    .map((item, idx) => ({ item, idx }))
+    .filter(({ item }) => item.type === 'speech' && !item.audioData);
+    
+  if (uncachedSegments.length === 0) {
+    isPreloading = false;
+    return;
+  }
+
+  const totalToCache = uncachedSegments.length;
+  let cachedCount = 0;
+  
+  updatePlayerStatusUI('preloading');
+  if (playerTimeDisplay) {
+    playerTimeDisplay.textContent = `Đang kết nối & tải âm thanh (0/${totalToCache})...`;
+  }
+  
+  // Concurrency limit of 5 parallel requests
+  const limit = 5;
+  let activeIndex = 0;
+  
+  const worker = async () => {
+    while (activeIndex < uncachedSegments.length) {
+      if (!isPlaying || isPaused) break; // abort if stopped or paused
+      
+      const current = activeIndex++;
+      const { item, idx } = uncachedSegments[current];
+      
+      try {
+        let voiceName = item.voiceName;
+        if (!voiceName && item.lang) {
+          voiceName = selectedLanguageVoices[item.lang];
+          if (!voiceName) {
+            const preferred = getPreferredVoice(item.lang, voices);
+            voiceName = preferred ? preferred.name : '';
+          }
+        }
+        if (!voiceName && voices.length > 0) {
+          voiceName = voices[0].name;
+        }
+
+        const result = await window.api.synthesizeEdgeTts({
+          text: item.text,
+          voice: voiceName,
+          rate: item.rate || 1.0,
+          pitch: item.pitch || 1.0,
+          engine: ttsEngine.value
+        });
+        
+        if (result.success && result.audioData) {
+          item.audioData = result.audioData;
+          item.fallbackUsed = result.fallbackUsed;
+          item.synthesizedRate = item.rate || 1.0;
+        } else {
+          console.error(`Failed to preload segment #${idx + 1}:`, result.error);
+        }
+      } catch (err) {
+        console.error(`Error preloading segment #${idx + 1}:`, err);
+      }
+      
+      cachedCount++;
+      if (playerTimeDisplay && isPlaying && !isPaused) {
+        playerTimeDisplay.textContent = `Đang kết nối & tải âm thanh (${cachedCount}/${totalToCache})...`;
+      }
+    }
+  };
+  
+  const workers = [];
+  for (let i = 0; i < Math.min(limit, uncachedSegments.length); i++) {
+    workers.push(worker());
+  }
+  
+  await Promise.all(workers);
+  isPreloading = false;
+}
+
+async function playQueue() {
   isPlaying = true;
   isPaused = false;
+  
+  await preloadQueueAudio();
+  
+  if (!isPlaying || isPaused) return; // check if user cancelled or paused during preloading
+  
   updatePlayerStatusUI('speaking');
   
   if (currentQueueIndex === -1 || currentQueueIndex >= queue.length) {
@@ -1192,14 +1359,18 @@ function playQueue() {
   playSegment(currentQueueIndex);
 }
 
-function playFromIndex(index) {
+async function playFromIndex(index) {
   stopQueue();
   
   isPlaying = true;
   isPaused = false;
-  updatePlayerStatusUI('speaking');
   currentQueueIndex = index;
   
+  await preloadQueueAudio();
+  
+  if (!isPlaying || isPaused) return;
+  
+  updatePlayerStatusUI('speaking');
   playSegment(currentQueueIndex);
 }
 
@@ -1217,7 +1388,8 @@ function setupAudioPlayerEvents(audio) {
       playerSeekbar.value = audio.currentTime;
     }
     if (playerTimeDisplay) {
-      playerTimeDisplay.textContent = `00:00 / ${formatTime(audio.duration)}`;
+      const prefix = audio.dataset.fallbackUsed === 'true' ? '[Dự phòng] ' : '';
+      playerTimeDisplay.textContent = `${prefix}00:00 / ${formatTime(audio.duration)}`;
     }
   });
 
@@ -1226,7 +1398,8 @@ function setupAudioPlayerEvents(audio) {
       playerSeekbar.value = audio.currentTime;
     }
     if (playerTimeDisplay) {
-      playerTimeDisplay.textContent = `${formatTime(audio.currentTime)} / ${formatTime(audio.duration)}`;
+      const prefix = audio.dataset.fallbackUsed === 'true' ? '[Dự phòng] ' : '';
+      playerTimeDisplay.textContent = `${prefix}${formatTime(audio.currentTime)} / ${formatTime(audio.duration)}`;
     }
   });
 
@@ -1235,15 +1408,13 @@ function setupAudioPlayerEvents(audio) {
       audio.playbackRate = 1.0;
       return;
     }
-    if (audio.dataset.isPreSpedUp === 'true' || audio.dataset.isPreSpedUp === true) {
-      audio.playbackRate = 1.0;
-      return;
-    }
-    if (isPlaying && currentQueueIndex !== -1 && queue[currentQueueIndex] && queue[currentQueueIndex].type === 'speech') {
-      audio.playbackRate = queue[currentQueueIndex].rate || parseFloat(globalRate.value) || 1.0;
-    } else {
-      audio.playbackRate = parseFloat(globalRate.value) || 1.0;
-    }
+    
+    const targetRate = isPlaying && currentQueueIndex !== -1 && queue[currentQueueIndex] && queue[currentQueueIndex].type === 'speech'
+      ? (queue[currentQueueIndex].rate || parseFloat(globalRate.value) || 1.0)
+      : (parseFloat(globalRate.value) || 1.0);
+    
+    const synthesizedRate = parseFloat(audio.dataset.synthesizedRate) || 1.0;
+    audio.playbackRate = targetRate / synthesizedRate;
   });
 }
 
@@ -1285,7 +1456,6 @@ function playSegment(index) {
     }
     
     cleanupAudioPlayer();
-    if (playerTimeDisplay) playerTimeDisplay.textContent = "Đang kết nối...";
     
     // Choose voice
     let voiceName = item.voiceName;
@@ -1302,57 +1472,95 @@ function playSegment(index) {
 
     console.log(`[TTS Playback] Segment #${index + 1} | Text: "${item.text}" | Lang: ${item.lang} | Voice: ${voiceName || 'Default'}`);
 
-    window.api.synthesizeEdgeTts({
-      text: item.text,
-      voice: voiceName,
-      rate: item.rate || 1.0,
-      pitch: item.pitch || 1.0,
-      engine: ttsEngine.value
-    }).then(result => {
-      if (!isPlaying || currentQueueIndex !== index || isPaused) return; // safety check
+    if (item.audioData) {
+      // Play cached audio data instantly without connection delays
+      const audioSrc = "data:audio/mp3;base64," + item.audioData;
+      const audio = new Audio(audioSrc);
+      audio.volume = parseFloat(playerVolume.value) || 1.0;
+      audio.dataset.fallbackUsed = !!item.fallbackUsed;
+      audio.dataset.isPreSpedUp = (ttsEngine.value === 'edge' && !item.fallbackUsed);
+      audio.dataset.synthesizedRate = (ttsEngine.value === 'edge' && !item.fallbackUsed)
+        ? (item.synthesizedRate || item.rate || parseFloat(globalRate.value) || 1.0)
+        : 1.0;
+      currentAudioPlayer = audio;
       
-      if (result.success && result.audioData) {
-        const audioSrc = "data:audio/mp3;base64," + result.audioData;
-        const audio = new Audio(audioSrc);
-        audio.volume = parseFloat(playerVolume.value) || 1.0;
-        audio.dataset.isPreSpedUp = (ttsEngine.value === 'edge' && !result.fallbackUsed);
-        currentAudioPlayer = audio;
+      setupAudioPlayerEvents(audio);
+      
+      audio.addEventListener('ended', () => {
+        cleanupAudioPlayer();
+        playSegment(currentQueueIndex + 1);
+      });
+      
+      audio.addEventListener('error', (err) => {
+        console.error("Audio playback error:", err);
+        cleanupAudioPlayer();
+        playSegment(currentQueueIndex + 1);
+      });
+      
+      audio.play().catch(err => {
+        console.error("Failed to start audio playback:", err);
+        cleanupAudioPlayer();
+        playSegment(currentQueueIndex + 1);
+      });
+    } else {
+      if (playerTimeDisplay) playerTimeDisplay.textContent = "Đang kết nối...";
+      
+      window.api.synthesizeEdgeTts({
+        text: item.text,
+        voice: voiceName,
+        rate: item.rate || 1.0,
+        pitch: item.pitch || 1.0,
+        engine: ttsEngine.value
+      }).then(result => {
+        if (!isPlaying || currentQueueIndex !== index || isPaused) return; // safety check
         
-        setupAudioPlayerEvents(audio);
-        
-        audio.addEventListener('ended', () => {
-          cleanupAudioPlayer();
-          playSegment(currentQueueIndex + 1);
-        });
-        
-        audio.addEventListener('error', (err) => {
-          console.error("Audio playback error:", err);
-          cleanupAudioPlayer();
-          playSegment(currentQueueIndex + 1);
-        });
-        
-        audio.play().catch(err => {
-          console.error("Failed to start audio playback:", err);
-          cleanupAudioPlayer();
-          playSegment(currentQueueIndex + 1);
-        });
-      } else {
-        console.error("Edge TTS synthesis failed:", result.error);
-        if (playerTimeDisplay) playerTimeDisplay.textContent = `Lỗi: ${result.error || 'TTS Error'}`;
+        if (result.success && result.audioData) {
+          const audioSrc = "data:audio/mp3;base64," + result.audioData;
+          const audio = new Audio(audioSrc);
+          audio.volume = parseFloat(playerVolume.value) || 1.0;
+          audio.dataset.fallbackUsed = !!result.fallbackUsed;
+          audio.dataset.isPreSpedUp = (ttsEngine.value === 'edge' && !result.fallbackUsed);
+          audio.dataset.synthesizedRate = (ttsEngine.value === 'edge' && !result.fallbackUsed)
+            ? (item.rate || parseFloat(globalRate.value) || 1.0)
+            : 1.0;
+          currentAudioPlayer = audio;
+          
+          setupAudioPlayerEvents(audio);
+          
+          audio.addEventListener('ended', () => {
+            cleanupAudioPlayer();
+            playSegment(currentQueueIndex + 1);
+          });
+          
+          audio.addEventListener('error', (err) => {
+            console.error("Audio playback error:", err);
+            cleanupAudioPlayer();
+            playSegment(currentQueueIndex + 1);
+          });
+          
+          audio.play().catch(err => {
+            console.error("Failed to start audio playback:", err);
+            cleanupAudioPlayer();
+            playSegment(currentQueueIndex + 1);
+          });
+        } else {
+          console.error("Edge TTS synthesis failed:", result.error);
+          if (playerTimeDisplay) playerTimeDisplay.textContent = `Lỗi: ${result.error || 'TTS Error'}`;
+          setTimeout(() => {
+            if (currentQueueIndex === index) {
+              playSegment(currentQueueIndex + 1);
+            }
+          }, 2000);
+        }
+      }).catch(err => {
+        console.error("synthesizeEdgeTts RPC error:", err);
         setTimeout(() => {
           if (currentQueueIndex === index) {
             playSegment(currentQueueIndex + 1);
           }
         }, 2000);
-      }
-    }).catch(err => {
-      console.error("synthesizeEdgeTts RPC error:", err);
-      setTimeout(() => {
-        if (currentQueueIndex === index) {
-          playSegment(currentQueueIndex + 1);
-        }
-      }, 2000);
-    });
+      });
+    }
   }
 }
 
@@ -1667,14 +1875,19 @@ function speakSentenceFromWordIndex(wordIdx, wordsList, fullText) {
       const audio = new Audio(audioSrc);
       audio.volume = parseFloat(playerVolume.value) || 1.0;
       audio.dataset.isPreSpedUp = (ttsEngine.value === 'edge' && !result.fallbackUsed);
+      audio.dataset.synthesizedRate = (ttsEngine.value === 'edge' && !result.fallbackUsed)
+        ? (currentSegment ? (currentSegment.rate || parseFloat(globalRate.value) || 1.0) : 1.0)
+        : 1.0;
       currentAudioPlayer = audio;
       
       prepareActiveSentenceDisplay(fullText);
       
       audio.addEventListener('play', () => {
-        audio.playbackRate = (audio.dataset.isPreSpedUp === 'true' || audio.dataset.isPreSpedUp === true)
-          ? 1.0
-          : (currentSegment ? (currentSegment.rate || parseFloat(globalRate.value) || 1.0) : 1.0);
+        const targetRate = currentSegment
+          ? (currentSegment.rate || parseFloat(globalRate.value) || 1.0)
+          : (parseFloat(globalRate.value) || 1.0);
+        const synthesizedRate = parseFloat(audio.dataset.synthesizedRate) || 1.0;
+        audio.playbackRate = targetRate / synthesizedRate;
           
         if (playbackInterval) clearInterval(playbackInterval);
         playbackInterval = setInterval(() => {

@@ -232,8 +232,68 @@ function fetchEdgeVoices() {
   });
 }
 
-// Edge TTS Synthesis Engine
+function chunkTextForEdgeTts(text, maxCharLen = 2500) {
+  if (text.length <= maxCharLen) {
+    return [text];
+  }
+  
+  const sentences = text.match(/[^.!?\r\n]+(?:[.!?\r\n]+|$)|[\r\n]+/g) || [text];
+  const chunks = [];
+  let currentChunk = '';
+  
+  for (const sentence of sentences) {
+    if ((currentChunk + sentence).length > maxCharLen) {
+      if (currentChunk.trim()) {
+        chunks.push(currentChunk.trim());
+      }
+      currentChunk = sentence;
+      
+      while (currentChunk.length > maxCharLen) {
+        const words = currentChunk.split(/\s+/);
+        let part = '';
+        let rest = [];
+        for (let i = 0; i < words.length; i++) {
+          if ((part + ' ' + words[i]).length <= maxCharLen) {
+            part += (part ? ' ' : '') + words[i];
+          } else {
+            rest = words.slice(i);
+            break;
+          }
+        }
+        if (part) {
+          chunks.push(part);
+        }
+        currentChunk = rest.join(' ');
+      }
+    } else {
+      currentChunk += sentence;
+    }
+  }
+  
+  if (currentChunk.trim()) {
+    chunks.push(currentChunk.trim());
+  }
+  
+  return chunks;
+}
+
 function runEdgeTts(text, voice, rate, pitch, isRetry = false) {
+  const chunks = chunkTextForEdgeTts(text, 2500);
+  if (chunks.length === 1) {
+    return runEdgeTtsSingle(chunks[0], voice, rate, pitch, isRetry);
+  }
+  
+  logDebug(`runEdgeTts: splitting text of length ${text.length} into ${chunks.length} chunks for synthesis.`);
+  return Promise.all(chunks.map(chunk => runEdgeTtsSingle(chunk, voice, rate, pitch, isRetry)))
+    .then(buffersBase64 => {
+      const buffers = buffersBase64.map(b => Buffer.from(b, 'base64'));
+      const combinedBuffer = Buffer.concat(buffers);
+      return combinedBuffer.toString('base64');
+    });
+}
+
+// Edge TTS Single Chunk Synthesis Engine
+function runEdgeTtsSingle(text, voice, rate, pitch, isRetry = false) {
   let finalVoice = voice;
   if (voice === 'vi-VN-AnNeural' || voice === 'vi-VN-An') {
     finalVoice = 'vi-VN-HoaiMyNeural';
@@ -292,7 +352,7 @@ function runEdgeTts(text, voice, rate, pitch, isRetry = false) {
               const clientTimeMs = Date.now();
               clockSkewSeconds = Math.floor((serverTimeMs - clientTimeMs) / 1000);
               console.log(`Đã phát hiện lệch giờ máy tính. Đang tự động bù lệch ${clockSkewSeconds} giây và thử lại...`);
-              runEdgeTts(text, voice, rate, pitch, true)
+              runEdgeTtsSingle(text, voice, rate, pitch, true)
                 .then(resolve)
                 .catch(reject);
               return;
@@ -332,7 +392,16 @@ function runEdgeTts(text, voice, rate, pitch, isRetry = false) {
       const pitchHz = Math.round((clampedPitch - 1.0) * 50);
       const pitchStr = pitchHz >= 0 ? `+${pitchHz}Hz` : `${pitchHz}Hz`;
       
-      const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'><voice name='${finalVoice}'><prosody rate='${ratePct}' pitch='${pitchStr}'>${text}</prosody></voice></speak>`;
+      // Extract locale dynamically from the voice name to prevent language mismatch errors
+      let voiceLocale = 'en-US';
+      if (finalVoice) {
+        const parts = finalVoice.split('-');
+        if (parts.length >= 2) {
+          voiceLocale = `${parts[0]}-${parts[1]}`;
+        }
+      }
+      
+      const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='${voiceLocale}'><voice name='${finalVoice}'><prosody rate='${ratePct}' pitch='${pitchStr}'>${text}</prosody></voice></speak>`;
       const ssmlMsg = `Path: ssml\r\nContent-Type: application/ssml+xml\r\nX-RequestId: ${connectionId}\r\nX-Timestamp: ${timestamp}\r\n\r\n${ssml}`;
       
       logDebug(`runEdgeTts: sending SSML: ${ssml}`);
