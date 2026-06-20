@@ -60,6 +60,26 @@ Bạn có thể chèn các thẻ điều hướng để điều khiển giọng 
               <span>Xóa toàn bộ dấu câu</span>
             </button>
           </div>
+          <div class="split-options-container" style="margin-top: 12px; padding: 10px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-card); border-radius: 8px; display: flex; flex-direction: column; gap: 8px;">
+            <div style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">Tùy chọn tách câu:</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+              <label class="checkbox-container" style="font-size: 11px; margin-bottom: 0;">
+                <input type="checkbox" id="chk-split-lang" checked>
+                <span class="checkmark"></span>
+                <span class="label-text">Tách theo ngôn ngữ</span>
+              </label>
+              <label class="checkbox-container" style="font-size: 11px; margin-bottom: 0;">
+                <input type="checkbox" id="chk-split-newline" checked>
+                <span class="checkmark"></span>
+                <span class="label-text">Xuống dòng</span>
+              </label>
+              <label class="checkbox-container" style="font-size: 11px; margin-bottom: 0;">
+                <input type="checkbox" id="chk-split-number">
+                <span class="checkmark"></span>
+                <span class="label-text">Xuống dòng trước số thứ tự</span>
+              </label>
+            </div>
+          </div>
         </div>
 
         <div class="parse-action-container">

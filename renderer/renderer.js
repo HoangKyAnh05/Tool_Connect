@@ -99,7 +99,29 @@ async function init() {
   // Load configuration from file
   await loadAppSettings();
 
+  // Initialize Split options from appSettings
+  const chkSplitLang = document.getElementById('chk-split-lang');
+  const chkSplitNewline = document.getElementById('chk-split-newline');
+  const chkSplitNumber = document.getElementById('chk-split-number');
 
+  if (chkSplitLang) {
+    chkSplitLang.checked = appSettings.split_lang !== false;
+    chkSplitLang.addEventListener('change', async () => {
+      await saveAppSettings('split_lang', chkSplitLang.checked);
+    });
+  }
+  if (chkSplitNewline) {
+    chkSplitNewline.checked = appSettings.split_newline !== false;
+    chkSplitNewline.addEventListener('change', async () => {
+      await saveAppSettings('split_newline', chkSplitNewline.checked);
+    });
+  }
+  if (chkSplitNumber) {
+    chkSplitNumber.checked = appSettings.split_number === true;
+    chkSplitNumber.addEventListener('change', async () => {
+      await saveAppSettings('split_number', chkSplitNumber.checked);
+    });
+  }
 
   // Initialize Google Drive settings from appSettings
   const chkGDriveEnable = document.getElementById('chk-gdrive-enable');
@@ -636,6 +658,10 @@ function handleParseText() {
   
   stopQueue();
   
+  const chkSplitLang = document.getElementById('chk-split-lang');
+  const chkSplitNewline = document.getElementById('chk-split-newline');
+  const chkSplitNumber = document.getElementById('chk-split-number');
+  
   const globalConfig = {
     autoDetect: chkAutoDetect.checked,
     defaultLang: defaultLangSelect.value,
@@ -643,7 +669,10 @@ function handleParseText() {
     defaultPitch: parseFloat(globalPitch.value),
     periodPause: parseInt(periodPause.value, 10),
     commaPause: parseInt(commaPause.value, 10),
-    defaultEmotion: globalPreset.value
+    defaultEmotion: globalPreset.value,
+    splitLang: chkSplitLang ? chkSplitLang.checked : true,
+    splitNewline: chkSplitNewline ? chkSplitNewline.checked : true,
+    splitNumber: chkSplitNumber ? chkSplitNumber.checked : false
   };
   
   queue = parseTextToQueue(text, globalConfig);
@@ -662,16 +691,31 @@ function handleParseText() {
 
 // Common English words frequently mixed in Vietnamese that DO NOT overlap with common unaccented Vietnamese words
 const commonEnglishWords = new Set([
-  // Basic structure & pronouns (non-overlapping)
-  'the', 'be', 'of', 'and', 'a', 'that', 'have', 'it', 'for', 'not', 'with', 'as', 'you', 'at',
-  'this', 'but', 'his', 'from', 'they', 'say', 'her', 'she', 'or', 'will', 'my', 'one', 'all', 'would', 'there', 'their', 'what',
-  'up', 'out', 'if', 'about', 'who', 'get', 'which', 'when', 'make', 'like', 'time', 'no', 'just', 'him', 'know', 'take',
-  'people', 'into', 'year', 'your', 'good', 'some', 'could', 'them', 'see', 'other', 'than', 'then', 'now', 'look', 'only', 'come', 'its', 'over', 'think', 'also',
+  // Pronouns & Basic Determiners
+  'i', 'me', 'my', 'myself', 'we', 'us', 'our', 'ours', 'ourselves', 'you', 'your', 'yours', 'yourself', 'yourselves',
+  'he', 'him', 'his', 'himself', 'she', 'her', 'hers', 'herself', 'it', 'its', 'itself', 'they', 'them', 'their', 'theirs', 'themselves',
+  'this', 'that', 'these', 'those', 'each', 'every', 'either', 'neither', 'some', 'any', 'no', 'none', 'all', 'both', 'half', 'either',
   
-  // Greetings/Common
+  // Articles & Prepositions & Conjunctions
+  'a', 'an', 'the', 'and', 'but', 'or', 'nor', 'so', 'yet', 'for', 'at', 'by', 'in', 'on', 'of', 'to', 'up', 'down', 'with', 'about',
+  'against', 'between', 'during', 'before', 'after', 'above', 'below', 'from', 'into', 'through', 'over', 'under', 'again', 'further',
+  'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such',
+  
+  // Verbs (Auxiliary, Modal & Common)
+  'be', 'am', 'is', 'are', 'was', 'were', 'being', 'been', 'have', 'has', 'had', 'having', 'do', 'does', 'did', 'doing',
+  'can', 'could', 'shall', 'should', 'will', 'would', 'may', 'might', 'must', 'ought',
+  'say', 'says', 'said', 'go', 'goes', 'went', 'gone', 'come', 'came', 'get', 'gets', 'got', 'getting', 'make', 'makes', 'made', 'making',
+  'take', 'takes', 'took', 'taken', 'taking', 'see', 'sees', 'saw', 'seen', 'seeing', 'look', 'looks', 'looked', 'looking',
+  'think', 'thinks', 'thought', 'thinking', 'know', 'knows', 'knew', 'known', 'knowing', 'tell', 'tells', 'told', 'telling',
+  'give', 'gives', 'gave', 'given', 'giving', 'find', 'finds', 'found', 'finding', 'work', 'works', 'worked', 'working',
+  'ask', 'asks', 'asked', 'asking', 'let', 'lets', 'letting', 'help', 'helps', 'helped', 'helping',
+  
+  // Words from standard conversational scripts
+  'speaking', 'part', 'cue', 'card', 'topic', 'describe', 'talk', 'about', 'funny', 'honest', 'depends', 'perfectly',
+  'perspective', 'personally', 'convinced', 'concerned', 'seems', 'view', 'opinion', 'argue', 'inclined', 'believe', 'belief',
   'hello', 'hi', 'welcome', 'thanks', 'thank', 'please', 'sorry', 'yes', 'ok', 'okay', 'cool', 'great', 'goodbye', 'bye',
   
-  // Tech / Software terms frequently mixed in Vietnamese
+  // Technical Terms
   'api', 'app', 'application', 'code', 'coder', 'developer', 'design', 'web', 'website', 'link', 'url', 'click', 'double', 'shortcut', 'desktop',
   'terminal', 'console', 'electron', 'node', 'npm', 'run', 'start', 'test', 'debug', 'install', 'setup', 'config', 'configuration', 'save', 'load',
   'open', 'close', 'file', 'folder', 'directory', 'project', 'text', 'speech', 'audio', 'sound', 'voice', 'rate', 'pitch', 'volume', 'mp3', 'wav',
@@ -688,19 +732,73 @@ const commonVietnameseUnaccentedWords = new Set([
   'xa', 'gan', 'cao', 'thap', 'dai', 'ngan', 'to', 'nho', 'lon', 'be', 'hom', 'nay', 'qua', 'mai', 'tuan', 'thang', 'nam', 'gio',
   'phut', 'giay', 'ngay', 'dem', 'sang', 'trua', 'chieu', 'toi', 'nguoi', 'nha', 'truong', 'lop', 'anh', 'em', 'chi', 'ba', 'me',
   'cha', 'ong', 'con', 'chau', 'nuoc', 'dat', 'troi', 'gio', 'mua', 'nang', 'lanh', 'nong', 'am', 'mat', 'duong', 'pho', 'xe',
-  'may', 'bay', 'tau', 'giup', 'duoc', 'muon', 'can', 'phai', 'nen', 'thich'
+  'may', 'bay', 'tau', 'giup', 'duoc', 'muon', 'can', 'phai', 'nen', 'thich',
+
+  // Common administrative, social, business terms (unaccented)
+  'trieu', 'tram', 'nghin', 'ty', 'dong', 'quoc', 'gia', 'chinh', 'phu', 'xa', 'hoi', 'kinh', 'te', 'van', 'hoa', 'giao', 'duc', 'y', 'te', 'khoa', 'hoc', 'cong', 'nghe', 'phat', 'trien', 'san', 'xuat', 'kinh', 'doanh', 'dich', 'vu', 'khach', 'hang', 'thi', 'truong', 'san', 'pham', 'chat', 'luong', 'uy', 'tin', 'hieu', 'qua', 'thuc', 'te', 'phu', 'hop', 'dac', 'biet', 'quan', 'trong', 'yeu', 'cau', 'dieu', 'kien', 'quy', 'dinh', 'chinh', 'sach', 'he', 'thong', 'quy', 'trinh', 'huong', 'dan', 'su', 'dung', 'thong', 'tin', 'du', 'lieu', 'tai', 'khoan', 'mat', 'khau', 'dang', 'nhap', 'dang', 'ky', 'thanh', 'vien', 'lien', 'he', 'ho', 'tro', 'tu', 'van', 'thanh', 'toan', 'ngan', 'hang', 'the', 'tin', 'dung', 'mua', 'sam', 'giao', 'hang', 'tiet', 'kiem', 'mien', 'phi', 'khuyen', 'mai', 'giam', 'gia', 'tang', 'su', 'kien', 'tuc', 'binh', 'luan', 'danh', 'gia', 'theo', 'doi', 'kenh', 'hinh', 'am', 'thanh', 'nhac', 'phim', 'truyen', 'bao', 'tap', 'chi', 'thoi', 'su', 'the', 'thao', 'giai', 'tri', 'du', 'lich', 'am', 'thuc', 'nau', 'suc', 'khoe', 'lam', 'dep', 'thoi', 'trang', 'cua', 'doi', 'song', 'gia', 'dinh', 'cai', 'bo', 'ban', 'be', 'dong', 'nghiep', 'cong', 'ty', 'van', 'phong', 'viec', 'sinh', 'vien', 'diem', 'so', 'bang', 'cap', 'chung', 'chi', 'khoa', 'hoc', 'dai', 'hoc', 'vien', 'nghien', 'cuu', 'ung', 'dung', 'phan', 'mem', 'thiet', 'bi', 'dien', 'thoai', 'smart', 'phone', 'dong', 'ho', 'thong', 'minh', 'phu', 'kien', 'linh', 'kien', 'bao', 'hanh', 'sua', 'chua', 'lap', 'dat', 'nang', 'cap', 'thay', 'the', 'doi', 'tra', 'hoan', 'tien', 'khieu', 'nai', 'giai', 'quyet', 'tranh', 'chap'
 ]);
+
+function isExclusivelyEnglishPattern(word) {
+  const w = word.toLowerCase();
+  // Consonant clusters at end: st, rt, ld, rd, nt, nd, ct, ft, lt, mp, nk, pt, rk, sk, sp, lly, ss, ff, ll, tt, pp, rr, bb, dd, gg, ck, sh
+  if (/(st|rt|ld|rd|nt|nd|ct|ft|lt|mp|nk|pt|rk|sk|sp|lly|ss|ff|ll|tt|pp|rr|bb|dd|gg|ck|sh)$/.test(w)) return true;
+  // Consonant clusters at start: str, spl, scr, pr, pl, cl, br, cr, dr, fr, gr, fl, gl, sh, wh, wr, kn, ps, gn
+  if (/^(str|spl|scr|pr|pl|cl|br|cr|dr|fr|gr|fl|gl|sh|wh|wr|kn|ps|gn)/.test(w)) return true;
+  // Double vowels or letters: ee, oo, ea, ou, nn, mm, cc
+  if (/(ee|oo|ea|ou|nn|mm|cc)/.test(w)) return true;
+  // Word length > 7
+  if (w.length > 7) return true;
+  return false;
+}
+
+function resolveWordLanguage(token) {
+  const cleanWord = token.toLowerCase().replace(/[^a-zà-ỹđ]/g, '');
+  if (!cleanWord) return 'neutral';
+
+  // 1. If it has accents, it's 100% Vietnamese
+  const viRegex = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i;
+  if (viRegex.test(token)) {
+    return 'vi';
+  }
+
+  // 2. Japanese, Korean, Chinese, Russian characters are 100% clear
+  const jaRegex = /[\u3040-\u309F\u30A0-\u30FF]/;
+  const koRegex = /[\uAC00-\uD7AF]/;
+  const zhRegex = /[\u4E00-\u9FFF]/;
+  const ruRegex = /[\u0400-\u04FF]/;
+  if (jaRegex.test(token)) return 'ja';
+  if (koRegex.test(token)) return 'ko';
+  if (zhRegex.test(token)) return 'zh';
+  if (ruRegex.test(token)) return 'ru';
+
+  // 3. Check for exclusively English patterns
+  if (isExclusivelyEnglishPattern(cleanWord)) {
+    return 'en';
+  }
+
+  // 4. Check lists
+  const isEng = commonEnglishWords.has(cleanWord);
+  const isVi = commonVietnameseUnaccentedWords.has(cleanWord);
+
+  if (isEng && isVi) {
+    // Ambiguous word (like "me", "an", "to", "no", "go", "so")
+    return 'ambiguous';
+  }
+  if (isEng) return 'en';
+  if (isVi) return 'vi';
+
+  // 5. Fallback: if it's in neither, has no accents, and contains only a-z, it's English
+  if (/^[a-z]+$/.test(cleanWord)) {
+    return 'en';
+  }
+
+  return 'neutral';
+}
 
 function segmentMixedSentence(text, defaultLang) {
   // Split the sentence into words and spaces/punctuation
   const tokens = text.split(/(\s+|[,.!?;:"'()\[\]]+)/g).filter(t => t.length > 0);
   const classifiedTokens = [];
-  
-  const viRegex = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i;
-  const jaRegex = /[\u3040-\u309F\u30A0-\u30FF]/;
-  const koRegex = /[\uAC00-\uD7AF]/;
-  const zhRegex = /[\u4E00-\u9FFF]/;
-  const ruRegex = /[\u0400-\u04FF]/;
   
   tokens.forEach(token => {
     const isWord = /[a-zA-Zà-ỹĐđ\u3040-\u309F\u30A0-\u30FF\uAC00-\uD7AF\u4E00-\u9FFF\u0400-\u04FF]/.test(token);
@@ -709,52 +807,42 @@ function segmentMixedSentence(text, defaultLang) {
       return;
     }
     
-    let lang = 'neutral';
-    const cleanWord = token.toLowerCase().replace(/[^a-zà-ỹđ]/g, '');
-    
-    if (viRegex.test(token)) {
-      lang = 'vi';
-    } else if (commonVietnameseUnaccentedWords.has(cleanWord)) {
-      lang = 'vi';
-    } else if (jaRegex.test(token)) {
-      lang = 'ja';
-    } else if (koRegex.test(token)) {
-      lang = 'ko';
-    } else if (zhRegex.test(token)) {
-      lang = 'zh';
-    } else if (ruRegex.test(token)) {
-      lang = 'ru';
-    } else if (commonEnglishWords.has(cleanWord)) {
-      lang = 'en';
-    }
-    
-    classifiedTokens.push({ type: 'word', text: token, lang: lang });
+    classifiedTokens.push({ type: 'word', text: token, lang: 'neutral' });
   });
-  
-  // Propagate languages to neutral words (neighbor context lookahead)
-  let lastWordLang = defaultLang;
-  
-  for (let i = 0; i < classifiedTokens.length; i++) {
-    if (classifiedTokens[i].type === 'word' && classifiedTokens[i].lang !== 'neutral') {
-      lastWordLang = classifiedTokens[i].lang;
-      break;
+
+  // 1. Resolve initial languages for all word tokens
+  classifiedTokens.forEach(token => {
+    if (token.type === 'word') {
+      token.lang = resolveWordLanguage(token.text);
     }
-  }
-  
+  });
+
+  // 2. Propagate context to 'neutral' and 'ambiguous' words
   for (let i = 0; i < classifiedTokens.length; i++) {
-    if (classifiedTokens[i].type === 'word') {
-      if (classifiedTokens[i].lang === 'neutral') {
-        let nextLang = null;
-        for (let j = i + 1; j < classifiedTokens.length; j++) {
-          if (classifiedTokens[j].type === 'word' && classifiedTokens[j].lang !== 'neutral') {
-            nextLang = classifiedTokens[j].lang;
-            break;
+    if (classifiedTokens[i].type === 'word' && (classifiedTokens[i].lang === 'neutral' || classifiedTokens[i].lang === 'ambiguous')) {
+      // Find closest clear language neighbor (left or right)
+      let closestLang = null;
+      let minDistance = Infinity;
+      
+      for (let j = 0; j < classifiedTokens.length; j++) {
+        if (classifiedTokens[j].type === 'word' && classifiedTokens[j].lang !== 'neutral' && classifiedTokens[j].lang !== 'ambiguous') {
+          const dist = Math.abs(i - j);
+          if (dist < minDistance) {
+            minDistance = dist;
+            closestLang = classifiedTokens[j].lang;
+          } else if (dist === minDistance) {
+            // Tie breaker!
+            // If the token is 'the', 'an', 'a', 'to', and the right neighbor (j > i) is English, prefer English!
+            const w = classifiedTokens[i].text.toLowerCase();
+            if (['the', 'an', 'a', 'to'].includes(w) && j > i && classifiedTokens[j].lang === 'en') {
+              closestLang = 'en';
+            }
           }
         }
-        classifiedTokens[i].lang = nextLang || lastWordLang;
-      } else {
-        lastWordLang = classifiedTokens[i].lang;
       }
+      
+      // Fallback if no clear neighbor found in the entire line
+      classifiedTokens[i].lang = closestLang || defaultLang;
     }
   }
   
@@ -793,6 +881,17 @@ function segmentMixedSentence(text, defaultLang) {
 function parseTextToQueue(text, config) {
   if (!text || !text.trim()) return [];
 
+  // Preprocess text to break lines before numbers (e.g. " 189 ", " 1. ", " 2) ") if enabled
+  if (config.splitNumber) {
+    const parts = text.split(/(\[[^\]]+\])/g);
+    for (let i = 0; i < parts.length; i++) {
+      if (!parts[i].startsWith('[') || !parts[i].endsWith(']')) {
+        parts[i] = parts[i].replace(/(?:\s+|^)((?<![\.,\d])\b\d+(?:[\.\)]\s|\s+)(?!\d))/g, '\n$1');
+      }
+    }
+    text = parts.join('');
+  }
+
   const queue = [];
   
   // Default states
@@ -812,15 +911,50 @@ function parseTextToQueue(text, config) {
 
   function flushSpeech() {
     if (currentSpeechText.trim()) {
-      const voiceName = selectedLanguageVoices[currentLang] || '';
-      queue.push({
-        type: 'speech',
-        text: currentSpeechText.trim(),
-        lang: currentLang,
-        rate: currentRate,
-        pitch: currentPitch,
-        emotion: currentEmotion,
-        voiceName: voiceName
+      let lines = [currentSpeechText];
+      
+      // 1. Split by newline if enabled
+      if (config.splitNewline) {
+        lines = [];
+        currentSpeechText.split(/\r?\n/).forEach(line => {
+          if (line.trim()) {
+            lines.push(line.trim());
+          }
+        });
+      }
+      
+      // 2. Process each line
+      lines.forEach(line => {
+        if (!line.trim()) return;
+        
+        let segments = [];
+        if (config.splitLang) {
+          // Split line by language switches
+          segments = segmentMixedSentence(line, currentLang);
+        } else {
+          // No language split, just treat the whole line as one segment
+          let lineLang = currentLang;
+          if (config.autoDetect) {
+            lineLang = detectLanguageOfText(line);
+          }
+          segments = [{ lang: lineLang, text: line }];
+        }
+        
+        // 3. Push segments to queue
+        segments.forEach(seg => {
+          if (!seg.text.trim()) return;
+          
+          const voiceName = selectedLanguageVoices[seg.lang] || '';
+          queue.push({
+            type: 'speech',
+            text: seg.text.trim(),
+            lang: seg.lang,
+            rate: currentRate,
+            pitch: currentPitch,
+            emotion: currentEmotion,
+            voiceName: voiceName
+          });
+        });
       });
       currentSpeechText = '';
     }
